@@ -11,7 +11,8 @@ sudo raspi-config
 # 5 Interfacing Options -> P1 Camera -> Enable
 # And reboot
 
-sudo apt-get install vim tmux git avahi-daemon
+sudo apt-get install vim tmux git mpg321
+sudo apt-get install python-pip python-pygame python-serial
 sudo vi /etc/hostname
 # raspberrypi to mobile
 ```
@@ -44,3 +45,13 @@ This is a security risk - please login as the 'pi' user and type 'passwd' to set
 
 pi@mobile:~ $
 ```
+
+## Run on startup
+
+```
+sudo vi /etc/rc.local
+
+/home/pi/diy-baby-crib-mobile/rpi/player.py &
+```
+
+and reboot
