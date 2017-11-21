@@ -13,7 +13,8 @@ function handleDiscovery(request, context) {
         require(__dirname + '/endpoints/tv.json'),
         require(__dirname + '/endpoints/aircon.json'),
         require(__dirname + '/endpoints/light-bedroom.json'),
-        require(__dirname + '/endpoints/light-living.json')
+        require(__dirname + '/endpoints/light-living.json'),
+        require(__dirname + '/endpoints/light-all.json')        
       ]
   }
   let header = request.directive.header
@@ -118,7 +119,7 @@ function handlePowerControl(request, context, callback) {
       }
       break
 
-    case 'light_bedroom':
+    case 'light-bedroom':
       if (requestMethod === 'TurnOn') {
         sendJsonCommandToIrkit('light-bedroom-onoff')
           .then(() => {
@@ -135,6 +136,36 @@ function handlePowerControl(request, context, callback) {
         })
       }
       break
+
+    case 'light-all':
+      if (requestMethod === 'TurnOn') {
+        sendJsonCommandToIrkit('light-bedroom-onoff')
+          .then(() => {
+            return sendJsonCommandToIrkit('light-living-onoff')
+          })
+          .then(() => {
+            sendResponse()
+          })
+      } else {
+        // OFFは2回ボタンを押さないといけない
+        sendJsonCommandToIrkit('light-bedroom-onoff')
+        .then(() => {
+          return sendJsonCommandToIrkit('light-living-onoff')
+        })
+        .then(() => {
+          return sendJsonCommandToIrkit('light-bedroom-onoff')
+        })
+        .then(() => {
+          return sendJsonCommandToIrkit('light-living-onoff')
+        })
+        .then(() => {
+          sendResponse()
+        })
+      }
+      break
+
+    default:
+      sendResponse()
   }
 
   function sendResponse() {
