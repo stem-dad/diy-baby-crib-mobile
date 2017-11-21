@@ -10,38 +10,10 @@ function handleDiscovery(request, context) {
   let payload = {
     endpoints:
       [
-        {
-          endpointId: 'tv',
-          manufacturerName: 'HAPT Lab.',
-          friendlyName: 'テレビ',
-          description: 'Smart Device Switch',
-          displayCategories: ['SWITCH'],
-          cookie: {
-            key1: 'arbitrary key/value pairs for skill to reference this endpoint.',
-            key2: 'There can be multiple entries',
-            key3: 'but they should only be used for reference purposes.',
-            key4: 'This is not a suitable place to maintain current endpoint state.'
-          },
-          capabilities:
-            [
-              {
-                type: 'AlexaInterface',
-                interface: 'Alexa',
-                version: '3'
-              },
-              {
-                interface: 'Alexa.PowerController',
-                version: '3',
-                type: 'AlexaInterface',
-                properties: {
-                  supported: [{
-                    name: 'powerState'
-                  }],
-                  retrievable: true
-                }
-              }
-            ]
-        }
+        require(__dirname + '/endpoints/tv.json'),
+        require(__dirname + '/endpoints/aircon.json'),
+        require(__dirname + '/endpoints/light-bedroom.json'),
+        require(__dirname + '/endpoints/light-living.json')
       ]
   }
   let header = request.directive.header
@@ -52,14 +24,17 @@ function handleDiscovery(request, context) {
 
 /**
  * irkit APIに赤外線データをPOSTする
- * @param {String} commandFileName ir_signalsディレクトリ内にあるコマンドjsonのファイル名 
+ * @param {String} commandFileName ir-signalsディレクトリ内にあるコマンドjsonのファイル名 
  */
 function sendJsonCommandToIrkit(commandFileName) {
   return new Promise((resolve, reject) => {
     try {
+      console.log(`commandFileName: ${commandFileName}`)
+
       // JSONをインポートして1行の文字列に変換
-      let commandJson = require(`./ir_signals/${commandFileName}.json`)
+      let commandJson = require(__dirname  + `/ir-signals/${commandFileName}.json`)
       let commandJsonString = JSON.stringify(commandJson)
+      
 
       // irkitのAPIに赤外線コマンドjsonをPOSTして、我が家のirkitから指定の赤外線パターンを発信
       // http://getirkit.com/#toc_11 参照
@@ -84,6 +59,120 @@ function sendJsonCommandToIrkit(commandFileName) {
 }
 
 /**
+ * ON/OFF系のコントロール
+ * @param {*} request 
+ * @param {*} context 
+ * @param {Function} callback 
+ */
+function handlePowerControl(request, context, callback) {
+  let requestMethod = request.directive.header.name
+  let endpointId = request.directive.endpoint.endpointId    
+  let powerResult = 'ON'
+
+  console.log('########### requestMethod: ', requestMethod, ', endpointId: ', endpointId)
+
+  if (requestMethod === 'TurnOn') {
+    powerResult = 'ON'
+  }
+  else if (requestMethod === 'TurnOff') {
+    powerResult = 'OFF'
+  }
+
+  switch (endpointId) {
+    case 'tv':
+      sendJsonCommandToIrkit('tv-onoff')
+        .then(() => {
+          sendResponse()
+        })
+      break
+    
+    case 'aircon':
+      if (requestMethod === 'TurnOn') {
+        sendJsonCommandToIrkit('aircon-on')
+          .then(() => {
+            sendResponse()
+          })
+      } else {
+        sendJsonCommandToIrkit('aircon-off')
+          .then(() => {
+            sendResponse()
+          })
+      }
+      break
+
+    case 'light-living':
+      if (requestMethod === 'TurnOn') {
+        sendJsonCommandToIrkit('light-living-onoff')
+          .then(() => {
+            sendResponse()
+          })
+      } else {
+        // OFFは2回ボタンを押さないといけない
+        sendJsonCommandToIrkit('light-living-onoff')
+        .then(() => {
+          return sendJsonCommandToIrkit('light-living-onoff')
+        })
+        .then(() => {
+          sendResponse()
+        })
+      }
+      break
+
+    case 'light_bedroom':
+      if (requestMethod === 'TurnOn') {
+        sendJsonCommandToIrkit('light-bedroom-onoff')
+          .then(() => {
+            sendResponse()
+          })
+      } else {
+        // OFFは2回ボタンを押さないといけない
+        sendJsonCommandToIrkit('light-bedroom-onoff')
+        .then(() => {
+          return sendJsonCommandToIrkit('light-bedroom-onoff')
+        })
+        .then(() => {
+          sendResponse()
+        })
+      }
+      break
+  }
+
+  function sendResponse() {
+    let contextResult = {
+      properties: [{
+        namespace: 'Alexa.PowerController',
+        name: 'powerState',
+        value: powerResult,
+        timeOfSample: '2017-09-03T16:20:50.52Z', //retrieve from result.
+        uncertaintyInMilliseconds: 50
+      }]
+    }
+    let responseHeader = request.directive.header
+    responseHeader.namespace = 'Alexa'
+    responseHeader.name = 'Response'
+    responseHeader.messageId = responseHeader.messageId + '-R'
+    let endpoint = {
+      scope: {
+        type: 'BearerToken',
+        token: 'Alexa-access-token'
+      },
+      endpointId: endpointId
+    }
+    let response = {
+      context: contextResult,
+      event: {
+        header: responseHeader
+      },
+      endpoint: endpoint,
+      payload: {}
+    }
+
+    // console.log('DEBUG', 'Alexa.PowerController ', JSON.stringify(response))
+    context.succeed(response)
+  }
+}
+
+/**
  * Alexaからコールされるところ
  * @param {*} request 
  * @param {*} context 
@@ -96,67 +185,8 @@ module.exports.alexa = (request, context, callback) => {
   }
   else if (request.directive.header.namespace === 'Alexa.PowerController') {
     if (request.directive.header.name === 'TurnOn' || request.directive.header.name === 'TurnOff') {
-      console.log('DEBUG:', 'TurnOn or TurnOff Request', JSON.stringify(request))
+      // console.log('DEBUG:', 'TurnOn or TurnOff Request', JSON.stringify(request))
       handlePowerControl(request, context, callback)
-    }
-  }
-
-  function handlePowerControl(request, context, callback) {
-    // get device ID passed in during discovery
-    let requestMethod = request.directive.header.name
-    // get user token pass in request
-    // let requestToken = request.directive.payload.scope.token
-    let powerResult
-
-    console.log('###########', requestMethod)
-
-    if (requestMethod === 'TurnOn') {
-      sendJsonCommandToIrkit('tv_onoff')
-        .then(() => {
-          sendResponse()
-        })
-      powerResult = 'ON'
-    }
-    else if (requestMethod === 'TurnOff') {
-      sendJsonCommandToIrkit('tv_onoff')
-      .then(() => {
-        sendResponse()
-      })
-      powerResult = 'OFF'
-    }
-
-    function sendResponse() {
-      let contextResult = {
-        properties: [{
-          namespace: 'Alexa.PowerController',
-          name: 'powerState',
-          value: powerResult,
-          timeOfSample: '2017-09-03T16:20:50.52Z', //retrieve from result.
-          uncertaintyInMilliseconds: 50
-        }]
-      }
-      let responseHeader = request.directive.header
-      responseHeader.namespace = 'Alexa'
-      responseHeader.name = 'Response'
-      responseHeader.messageId = responseHeader.messageId + '-R'
-      let endpoint = {
-        scope: {
-          type: 'BearerToken',
-          token: 'Alexa-access-token'
-        },
-        endpointId: 'tv'
-      }
-      let response = {
-        context: contextResult,
-        event: {
-          header: responseHeader
-        },
-        endpoint: endpoint,
-        payload: {}
-      }
-
-      console.log('DEBUG', 'Alexa.PowerController ', JSON.stringify(response))
-      context.succeed(response)
     }
   }
 }
