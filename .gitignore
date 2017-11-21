@@ -1,5 +1,13 @@
 *.mp3
 2017応募用紙_Word版(竹井英行).docx
+serverless.yml
+
+# vscode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # Inventor
 OldVersions

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*- cording: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import os
 import pygame.mixer
